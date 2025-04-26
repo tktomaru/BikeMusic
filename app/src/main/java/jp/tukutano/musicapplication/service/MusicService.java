@@ -145,7 +145,7 @@ public class MusicService extends Service {
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle("再生中の音楽")
                 .setContentText( title )
-                .setSmallIcon(R.drawable.ic_favorite)
+                .setSmallIcon(R.drawable.ic_notification)
                 .addAction(new NotificationCompat.Action(
                         android.R.drawable.ic_media_pause,
                         "停止",
