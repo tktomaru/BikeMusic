@@ -33,7 +33,7 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
      * インターフェース：曲選択コールバック
      */
     public interface OnSongClickListener {
-        void onSongClick(Song song);
+        void onSongClick(int position, Song song);
     }
 
     public SongAdapter(List<Song> songList, OnSongClickListener listener, FavoriteDao dao) {
@@ -71,7 +71,7 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
         );
 
         // タップ時再生
-        holder.itemView.setOnClickListener(v -> listener.onSongClick(song));
+        holder.itemView.setOnClickListener(v -> listener.onSongClick(position, song));
 
         // お気に入りボタン
         holder.btnFav.setOnClickListener(v -> {

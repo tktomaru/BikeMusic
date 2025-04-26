@@ -28,6 +28,8 @@ public class MusicService extends Service {
     public static final String ACTION_UPDATE_NOW_PLAYING =
             "jp.tukutano.musicapplication.ACTION_UPDATE_NOW_PLAYING";
     public static final String EXTRA_NOW_PLAYING = "EXTRA_NOW_PLAYING";
+    public static final String EXTRA_NOW_LOOP_POS = "EXTRA_NOW_LOOP_POS";
+
     // Volume
     public static final String ACTION_VOLUME_UP = "ACTION_VOLUME_UP";
     public static final String ACTION_VOLUME_DOWN = "ACTION_VOLUME_DOWN";
@@ -37,7 +39,6 @@ public class MusicService extends Service {
     public static final String ACTION_STOP = "ACTION_STOP";
     public static final String EXTRA_PLAYLIST = "EXTRA_PLAYLIST";
     public static final String EXTRA_PLAYLIST_TITLE = "EXTRA_PLAYLIST_TITLE";
-
     public static final String EXTRA_START_INDEX = "EXTRA_START_INDEX";
     private MediaPlayer mediaPlayer;
     private List<String> playlist = new ArrayList<>();
@@ -76,6 +77,11 @@ public class MusicService extends Service {
                 break;
 
             case ACTION_STOP:
+                Intent stopPosIntent = new Intent(ACTION_UPDATE_NOW_PLAYING);
+                stopPosIntent.putExtra(EXTRA_NOW_LOOP_POS, currentIndex);
+                LocalBroadcastManager.getInstance(this)
+                        .sendBroadcast(stopPosIntent);
+
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 stopSelf();
                 break;

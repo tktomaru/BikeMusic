@@ -192,7 +192,7 @@ public class DashboardFragment extends Fragment {
         return root;
     }
 
-    private void onSongSelected(Song song) {
+    private void onSongSelected(int position, Song song) {
         selectedSong = song;
         binding.tvNowPlaying.setText(song.getTitle());
     }
@@ -238,6 +238,10 @@ public class DashboardFragment extends Fragment {
                     Log.println(Log.DEBUG, "tktomaru", title);
                     binding.tvNowPlaying.setText(title);
                 }
+                String pos = intent.getStringExtra(MusicService.EXTRA_NOW_LOOP_POS);
+//                if (pos != null) {
+//                    currentIndex = Integer.parseInt(pos);
+//                }
             }
         };
         IntentFilter filter = new IntentFilter(MusicService.ACTION_UPDATE_NOW_PLAYING);

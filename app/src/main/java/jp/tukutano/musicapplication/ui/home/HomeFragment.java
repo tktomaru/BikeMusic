@@ -100,7 +100,6 @@ public class HomeFragment extends Fragment {
         seekBarVolume = binding.seekBarVolume;
         LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
         seekBarVolume.setProgress((int) (currentVolume * 100));
-        mediaPlayer.setOnCompletionListener(mp -> playNext());
 
         // 4. 再生・停止ボタン
         binding.btnPlayFav.setOnClickListener(v -> {
@@ -129,26 +128,9 @@ public class HomeFragment extends Fragment {
         return root;
     }
 
-    private void onSongSelected(Song song) {
-            binding.tvNowPlayingFav.setText(song.getTitle());
-    }
-
-    /**
-     * 指定インデックスの曲を再生
-     */
-    private void playAtIndex(int index) {
-        if (index < 0 || index >= favSongs.size()) return;
-        currentIndex = index;
-        Song song = favSongs.get(index);
+    private void onSongSelected(int position, Song song) {
+        currentIndex = position;
         binding.tvNowPlayingFav.setText(song.getTitle());
-    }
-
-    /**
-     * 次の曲を再生（ループ）
-     */
-    private void playNext() {
-        currentIndex = (currentIndex + 1) % favSongs.size();
-        playAtIndex(currentIndex);
     }
 
     @Override
@@ -193,8 +175,11 @@ public class HomeFragment extends Fragment {
 
                 String title = intent.getStringExtra(MusicService.EXTRA_NOW_PLAYING);
                 if (title != null) {
-                    Log.println(Log.DEBUG, "tktomaru", title);
                     binding.tvNowPlayingFav.setText(title);
+                }
+                String pos = intent.getStringExtra(MusicService.EXTRA_NOW_LOOP_POS);
+                if (pos != null) {
+                    currentIndex = Integer.parseInt(pos);
                 }
             }
         };
