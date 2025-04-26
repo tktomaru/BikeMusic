@@ -85,9 +85,9 @@ public class MusicService extends Service {
                 float vol = intent.getFloatExtra(EXTRA_VOLUME, currentVolume);
                 // +/-0.1 した後、範囲 clamp
                 if (ACTION_VOLUME_UP.equals(action)) {
-                    currentVolume = Math.min(1.0f, vol + 0.1f);
+                    currentVolume = Math.min(1.0f, vol + 0.001f);
                 } else {
-                    currentVolume = Math.max(0.0f, vol - 0.1f);
+                    currentVolume = Math.max(0.0f, vol - 0.001f);
                 }
                 // MediaPlayer に適用
                 mediaPlayer.setVolume(currentVolume, currentVolume);
