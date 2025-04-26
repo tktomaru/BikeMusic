@@ -141,9 +141,10 @@ public class MusicService extends Service {
                 .setAction(ACTION_STOP);
         PendingIntent pStop = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE);
 
+        String title = playTitlelist.get(currentIndex);
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle("再生中の音楽")
-                .setContentText("曲名を表示できます")
+                .setContentText( title )
                 .setSmallIcon(R.drawable.ic_favorite)
                 .addAction(new NotificationCompat.Action(
                         android.R.drawable.ic_media_pause,
