@@ -31,6 +31,7 @@ public class MusicService extends Service {
     // Volume
     public static final String ACTION_VOLUME_UP = "ACTION_VOLUME_UP";
     public static final String ACTION_VOLUME_DOWN = "ACTION_VOLUME_DOWN";
+    public static final String ACTION_TITLE = "ACTION_TITLE";
     public static final String EXTRA_VOLUME = "EXTRA_VOLUME";
     public static final String ACTION_PLAYLIST_PLAY = "ACTION_PLAYLIST_PLAY";
     public static final String ACTION_STOP = "ACTION_STOP";
@@ -94,6 +95,17 @@ public class MusicService extends Service {
                 // 通知を更新して新しいボリュームを添付
                 startForeground(1, buildNotification());
                 break;
+
+            case ACTION_TITLE:
+                // ▶▶▶ 追加：現在再生中の曲タイトルを Broadcast
+                if(null != playTitlelist && !playTitlelist.isEmpty()) {
+                    String title = playTitlelist.get(currentIndex); /* songタイトルをサービスで保持している変数から取得 */
+                    Intent update = new Intent(ACTION_UPDATE_NOW_PLAYING);
+                    update.putExtra(EXTRA_NOW_PLAYING, title);
+                    LocalBroadcastManager.getInstance(this)
+                            .sendBroadcast(update);
+                }
+                break;
         }
         return START_STICKY;
     }
@@ -112,7 +124,6 @@ public class MusicService extends Service {
 
             // ▶▶▶ 追加：現在再生中の曲タイトルを Broadcast
             String title = playTitlelist.get(currentIndex); /* songタイトルをサービスで保持している変数から取得 */
-            ;
             Intent update = new Intent(ACTION_UPDATE_NOW_PLAYING);
             update.putExtra(EXTRA_NOW_PLAYING, title);
             LocalBroadcastManager.getInstance(this)

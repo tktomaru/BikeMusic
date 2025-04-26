@@ -1,5 +1,6 @@
 package jp.tukutano.musicapplication.ui.home;
 
+import static jp.tukutano.musicapplication.service.MusicService.ACTION_TITLE;
 import static jp.tukutano.musicapplication.service.MusicService.ACTION_VOLUME_UP;
 import static jp.tukutano.musicapplication.service.MusicService.EXTRA_VOLUME;
 
@@ -220,6 +221,11 @@ public class HomeFragment extends Fragment {
         currentVolume = (saved != null) ? saved : 0.5f;
         LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
         seekBarVolume.setProgress((int) (currentVolume * 100));
+
+        // Title配信を依頼
+        Intent titleIntent = new Intent(getContext(), MusicService.class)
+                .setAction(ACTION_TITLE);
+        requireContext().startService(titleIntent);
     }
 
     @Override
