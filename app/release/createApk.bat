@@ -1,0 +1,1 @@
+ java -jar bundletool.jar build-apks --bundle=app-release.aab --output=BikeMusic.apks --mode=universal
