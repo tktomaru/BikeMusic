@@ -29,7 +29,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.room.Room;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -45,146 +44,131 @@ import jp.tukutano.musicapplication.service.MusicService;
 import jp.tukutano.musicapplication.util.LogUtils;
 import jp.tukutano.musicapplication.util.MusicUtils;
 
+/**
+ * ダッシュボード画面
+ * - 全曲リスト表示
+ * - 検索・アーティスト絞り込み
+ * - 再生・停止・音量調整
+ * - お気に入り登録
+ */
 public class DashboardFragment extends Fragment {
 
+    // ViewBinding オブジェクト
     private FragmentDashboardBinding binding;
+    // バックグラウンド再生用 MediaPlayer
     private MediaPlayer mediaPlayer;
+    // 選択中の楽曲
     private Song selectedSong;
+    // 音量調整用 SeekBar
     private SeekBar seekBarVolume;
-    private Float currentVolume = 0.5f; // 0.0〜1.0 の範囲
+    // 現在のアプリ内再生音量 (0.0〜1.0)
+    private Float currentVolume = 0.5f;
 
-    private List<Song> songList;         // 全曲リスト
-    private List<Song> filteredList;     // フィルタ後リスト
-    private SongAdapter adapter;         // フィールド化
+    // 全楽曲リスト
+    private List<Song> songList;
+    // フィルタ後リスト
+    private List<Song> filteredList;
+    // RecyclerView 用アダプタ
+    private SongAdapter adapter;
 
+    // アーティスト絞り込み用 Spinner
     private Spinner spinnerArtist;
-    private List<String> artistNames;     // 全アーティスト名（重複なし）
+    // アーティスト名一覧（重複なし）
+    private List<String> artistNames;
     private ArrayAdapter<String> spinnerAdapter;
 
+    // Room DB
     private AppDatabase db;
     private FavoriteDao favoriteDao;
     private SettingDao settingDao;
+    // 再生中曲情報受信用レシーバー
     private BroadcastReceiver nowPlayingReceiver;
 
-
+    /**
+     * フラグメントのビュー生成処理
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
+        // デバッグ用ログ
+        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "Dashboard onCreateView");
+        // ViewModel 初期化（不要なら削除可）
         DashboardViewModel dashboardViewModel =
                 new ViewModelProvider(this).get(DashboardViewModel.class);
+        // ViewBinding のセット
         binding = FragmentDashboardBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
-
-        // DB 初期化
+        // --- Room DB 初期化 ---
         db = Room.databaseBuilder(
-                        getContext().getApplicationContext(),
+                        requireContext().getApplicationContext(),
                         AppDatabase.class, "music_app_db")
-                .allowMainThreadQueries()  // 簡易実装。大量データならバックグラウンド推奨
+                .allowMainThreadQueries()  // デモ用: 本番は非同期推奨
                 .build();
         favoriteDao = db.favoriteDao();
         settingDao = db.settingDao();
 
-        // 保存値があれば読み込み、なければデフォルト1.0f
+        // 保存音量読み込み or デフォルト
         Float saved = settingDao.getValue("volume");
         currentVolume = (saved != null) ? saved : 0.5f;
 
-
         // MediaPlayer 初期化
         mediaPlayer = new MediaPlayer();
-
         seekBarVolume = binding.seekBarVolume;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-        seekBarVolume.setProgress((int) (currentVolume * 100));
+        // SeekBar に初期音量をセット
+        seekBarVolume.setProgress((int)(currentVolume * 100));
 
-        // 曲一覧ロード（MusicUtils は自作ユーティリティ想定）
-        songList = MusicUtils.loadAllAudio(getContext());
+        // --- 曲リスト読み込み ---
+        songList = MusicUtils.loadAllAudio(requireContext());
         filteredList = new ArrayList<>(songList);
 
-
-        // SearchView リスナー設定
+        // --- 検索バー設定 ---
         binding.searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
+                // 検索実行
                 applyFilters(query, (String) spinnerArtist.getSelectedItem());
                 return true;
             }
-
             @Override
             public boolean onQueryTextChange(String newText) {
+                // 入力ごとにフィルタ更新
                 applyFilters(newText, (String) spinnerArtist.getSelectedItem());
                 return true;
             }
         });
 
-        // RecyclerView セットアップ
+        // --- RecyclerView 設定 ---
         binding.recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new SongAdapter(filteredList, this::onSongSelected, favoriteDao);
         binding.recyclerView.setAdapter(adapter);
 
-        // 再生ボタン
-        binding.btnPlay.setOnClickListener(v -> {
-            ArrayList<String> uriList = new ArrayList<>();
-            ArrayList<String> titleList = new ArrayList<>();
+        // --- 再生/停止 ボタン処理 ---
+        binding.btnPlay.setOnClickListener(v -> playSelectedSong());
+        binding.btnStop.setOnClickListener(v -> stopPlayback());
 
-
-            if (null != selectedSong) {
-                uriList.add(selectedSong.getUri());
-                titleList.add(selectedSong.getTitle());
-                Intent intent = new Intent(requireContext(), MusicService.class)
-                        .setAction(MusicService.ACTION_PLAYLIST_PLAY)
-                        .putStringArrayListExtra(MusicService.EXTRA_PLAYLIST, uriList)
-                        .putStringArrayListExtra(MusicService.EXTRA_PLAYLIST_TITLE, titleList)
-                        .putExtra(MusicService.EXTRA_START_INDEX, 0);
-                ContextCompat.startForegroundService(requireContext(), intent);
-
-                Intent volUpIntent = new Intent(getContext(), MusicService.class)
-                        .setAction(ACTION_VOLUME_UP)
-                        .putExtra(EXTRA_VOLUME, currentVolume);
-                requireContext().startService(volUpIntent);
-            }
-        });
-
-        // 停止ボタン
-        binding.btnStop.setOnClickListener(v -> {
-            Intent stop = new Intent(requireContext(), MusicService.class)
-                    .setAction(MusicService.ACTION_STOP);
-            requireContext().startService(stop);
-        });
-
-
-        // --- Spinner 準備 ---
+        // --- アーティスト Spinner 設定 ---
         spinnerArtist = binding.spinnerArtist;
-
-        // ① 全アーティスト名を重複排除で抽出
+        // 重複排除してアーティスト名を抽出
         Set<String> set = new TreeSet<>();
-        for (Song s : songList) {
-            set.add(s.getArtist());
-        }
+        for (Song s : songList) set.add(s.getArtist());
         artistNames = new ArrayList<>();
-        artistNames.add("すべて");    // デフォルト（絞り込みなし）
+        artistNames.add("すべて");
         artistNames.addAll(set);
-
-        // ② ArrayAdapter を作成して Spinner にセット
         spinnerAdapter = new ArrayAdapter<>(
-                getContext(),
+                requireContext(),
                 android.R.layout.simple_spinner_item,
-                artistNames
-        );
+                artistNames);
         spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerArtist.setAdapter(spinnerAdapter);
-
-        // ③ 選択リスナー登録
         spinnerArtist.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                String selectedArtist = artistNames.get(pos);
-                applyFilters(binding.searchView.getQuery().toString(), selectedArtist);
+                // 選択アーティストで絞り込み
+                applyFilters(binding.searchView.getQuery().toString(), artistNames.get(pos));
             }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+            @Override public void onNothingSelected(AdapterView<?> parent) {
+                // デフォルト表示
                 applyFilters(binding.searchView.getQuery().toString(), "すべて");
             }
         });
@@ -192,123 +176,128 @@ public class DashboardFragment extends Fragment {
         return root;
     }
 
+    /**
+     * 選択された楽曲を再生リクエスト
+     */
+    private void playSelectedSong() {
+        if (selectedSong == null) return;
+        // Intent に URI とタイトルをセットし Service 起動
+        ArrayList<String> uriList = new ArrayList<>();
+        ArrayList<String> titleList = new ArrayList<>();
+        uriList.add(selectedSong.getUri());
+        titleList.add(selectedSong.getTitle());
+        Intent intent = new Intent(requireContext(), MusicService.class)
+                .setAction(MusicService.ACTION_PLAYLIST_PLAY)
+                .putStringArrayListExtra(MusicService.EXTRA_PLAYLIST, uriList)
+                .putStringArrayListExtra(MusicService.EXTRA_PLAYLIST_TITLE, titleList)
+                .putExtra(MusicService.EXTRA_START_INDEX, 0);
+        ContextCompat.startForegroundService(requireContext(), intent);
+        // 初期音量を Service に通知
+        Intent volUp = new Intent(requireContext(), MusicService.class)
+                .setAction(ACTION_VOLUME_UP)
+                .putExtra(EXTRA_VOLUME, currentVolume);
+        ContextCompat.startForegroundService(requireContext(), volUp);
+    }
+
+    /**
+     * 再生中の楽曲を停止
+     */
+    private void stopPlayback() {
+        Intent stop = new Intent(requireContext(), MusicService.class)
+                .setAction(MusicService.ACTION_STOP);
+        ContextCompat.startForegroundService(requireContext(), stop);
+    }
+
+    /**
+     * 項目タップ時コールバック
+     */
     private void onSongSelected(int position, Song song) {
         selectedSong = song;
         binding.tvNowPlaying.setText(song.getTitle());
     }
 
     /**
-     * キーワード検索 と アーティスト絞り込み を同時に適用するメソッド
-     *
-     * @param keyword 曲タイトル or アーティストの部分一致
-     * @param artist  絞り込み対象アーティスト名（"すべて" は全件）
+     * 検索キーワードとアーティスト絞り込みを同時に適用
      */
     private void applyFilters(String keyword, String artist) {
         String q = keyword.trim().toLowerCase();
         filteredList.clear();
         for (Song s : songList) {
-            boolean matchesKeyword = q.isEmpty()
-                    || s.getTitle().toLowerCase().contains(q)
-                    || s.getArtist().toLowerCase().contains(q);
-            boolean matchesArtist = artist.equals("すべて")
-                    || s.getArtist().equals(artist);
-            if (matchesKeyword && matchesArtist) {
-                filteredList.add(s);
-            }
+            boolean matchKey = q.isEmpty() || s.getTitle().toLowerCase().contains(q) || s.getArtist().toLowerCase().contains(q);
+            boolean matchArtist = "すべて".equals(artist) || s.getArtist().equals(artist);
+            if (matchKey && matchArtist) filteredList.add(s);
         }
         adapter.updateList(filteredList);
     }
 
+    /**
+     * フラグメント開始時: レシーバ登録 & SeekBar リスナー
+     */
     @Override
     public void onStart() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onStart();
-        // 保存値があれば読み込み、なければデフォルト
+        // 音量設定の再読み込み
         Float saved = settingDao.getValue("volume");
         currentVolume = (saved != null) ? saved : 0.5f;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-        seekBarVolume.setProgress((int) (currentVolume * 100));
-        // レシーバーを作成
+        seekBarVolume.setProgress((int)(currentVolume * 100));
+        // BroadcastReceiver 登録: Service から現在曲タイトルを受信
         nowPlayingReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-
                 String title = intent.getStringExtra(MusicService.EXTRA_NOW_PLAYING);
-                if (title != null) {
-                    Log.println(Log.DEBUG, "tktomaru", title);
-                    binding.tvNowPlaying.setText(title);
-                }
-                String pos = intent.getStringExtra(MusicService.EXTRA_NOW_LOOP_POS);
-//                if (pos != null) {
-//                    currentIndex = Integer.parseInt(pos);
-//                }
+                if (title != null) binding.tvNowPlaying.setText(title);
             }
         };
-        IntentFilter filter = new IntentFilter(MusicService.ACTION_UPDATE_NOW_PLAYING);
-        // インテントフィルタを作成して登録
         LocalBroadcastManager.getInstance(requireContext())
-                .registerReceiver(nowPlayingReceiver, filter);
-
-
-        //シークバー
+                .registerReceiver(nowPlayingReceiver, new IntentFilter(MusicService.ACTION_UPDATE_NOW_PLAYING));
+        // SeekBar の音量変更リスナー
         seekBarVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 currentVolume = progress / 100f;
-                Intent volUpIntent = new Intent(getContext(), MusicService.class)
+                Intent volIntent = new Intent(requireContext(), MusicService.class)
                         .setAction(ACTION_VOLUME_UP)
                         .putExtra(EXTRA_VOLUME, currentVolume);
-                requireContext().startService(volUpIntent);
-
-                // 設定値保存
-                LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-                Setting setting = new Setting("volume", currentVolume);
-                settingDao.insert(setting);
+                ContextCompat.startForegroundService(requireContext(), volIntent);
+                // Room に音量保存
+                settingDao.insert(new Setting("volume", currentVolume));
             }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
 
+    /**
+     * フラグメント再開時: Service にタイトル更新要求
+     */
     @Override
     public void onResume() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onResume();
-        // 保存値があれば読み込み、なければデフォルト
-        Float saved = settingDao.getValue("volume");
-        currentVolume = (saved != null) ? saved : 0.5f;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-        seekBarVolume.setProgress((int) (currentVolume * 100));
-
-        // Title配信を依頼
-        Intent titleIntent = new Intent(getContext(), MusicService.class)
+        Intent intent = new Intent(requireContext(), MusicService.class)
                 .setAction(ACTION_TITLE);
-        requireContext().startService(titleIntent);
+        ContextCompat.startForegroundService(requireContext(), intent);
     }
 
+    /**
+     * フラグメント停止時: リソース解放 & レシーバ解除
+     */
     @Override
     public void onStop() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onStop();
         if (mediaPlayer != null) {
             if (mediaPlayer.isPlaying()) mediaPlayer.stop();
             mediaPlayer.release();
             mediaPlayer = null;
         }
-        // レシーバー解除
         if (nowPlayingReceiver != null) {
-            LocalBroadcastManager.getInstance(requireContext())
-                    .unregisterReceiver(nowPlayingReceiver);
+            LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(nowPlayingReceiver);
             nowPlayingReceiver = null;
         }
     }
 
+    /**
+     * ビュー破棄時に Binding をクリア
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();

@@ -4,16 +4,13 @@ import static jp.tukutano.musicapplication.service.MusicService.ACTION_TITLE;
 import static jp.tukutano.musicapplication.service.MusicService.ACTION_VOLUME_UP;
 import static jp.tukutano.musicapplication.service.MusicService.EXTRA_VOLUME;
 
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,7 +24,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.room.Room;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,44 +38,69 @@ import jp.tukutano.musicapplication.service.MusicService;
 import jp.tukutano.musicapplication.ui.dashboard.SongAdapter;
 import jp.tukutano.musicapplication.util.LogUtils;
 
+/**
+ * HomeFragment
+ * - お気に入り曲のリスト表示
+ * - 再生/停止/音量調整
+ * - 現在再生中の曲タイトルを通知領域で受信
+ */
 public class HomeFragment extends Fragment {
 
+    // ViewBinding オブジェクト
     private FragmentHomeBinding binding;
+    // Room データベース
     private AppDatabase db;
+    // お気に入り DAO
     private FavoriteDao favoriteDao;
+    // 設定 DAO（音量保存用）
     private SettingDao settingDao;
+    // MediaPlayer（UI上のプレイ止め用、一時的に利用）
     private MediaPlayer mediaPlayer;
+    // お気に入り曲リスト
     private List<Song> favSongs;
+    // 再生中の曲インデックス
     private int currentIndex = 0;
+    // 音量調整用 SeekBar
     private SeekBar seekBarVolume;
-    private Float currentVolume = 0.5f; // 0.0〜1.0 の範囲
+    // 現在のアプリ内音量（0.0〜1.0）
+    private Float currentVolume = 0.5f;
+    // 曲タイトル受信用 BroadcastReceiver
     private BroadcastReceiver nowPlayingReceiver;
 
+    /**
+     * フラグメントのビュー生成
+     */
+    @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
+        // ログ出力（デバッグ）
+        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "onCreateView");
+
+        // ViewModel の初期化（必要に応じて利用）
         HomeViewModel homeViewModel =
                 new ViewModelProvider(this).get(HomeViewModel.class);
 
+        // ViewBinding の初期化
         binding = FragmentHomeBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
+        // Room データベースのビルダー
         db = Room.databaseBuilder(
-                        getContext().getApplicationContext(),
+                        requireContext().getApplicationContext(),
                         AppDatabase.class, "music_app_db")
-                .allowMainThreadQueries()
+                .allowMainThreadQueries()  // 簡易実装: メインスレッドで許可
                 .build();
         favoriteDao = db.favoriteDao();
         settingDao = db.settingDao();
 
-        // 保存値があれば読み込み、なければデフォルト1.0f
+        // 保存された音量を読み込み、なければデフォルト0.5f
         Float saved = settingDao.getValue("volume");
         currentVolume = (saved != null) ? saved : 0.5f;
 
-        // RecyclerView
+        // RecyclerView のレイアウトマネージャ設定
         binding.recyclerFav.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // FavoriteSong → Song へのマッピング
+        // 永続化された FavoriteSong をモデルト変換
         List<FavoriteSong> favs = favoriteDao.getAllFavorites();
         ArrayList<String> uriList = new ArrayList<>();
         ArrayList<String> titleList = new ArrayList<>();
@@ -90,21 +111,18 @@ public class HomeFragment extends Fragment {
             titleList.add(f.title);
         }
 
-
-        // Adapter
+        // RecyclerView にアダプタ設定
         SongAdapter adapter = new SongAdapter(favSongs, this::onSongSelected, favoriteDao);
         binding.recyclerFav.setAdapter(adapter);
 
-        // 3. MediaPlayer 初期化
-        mediaPlayer = new MediaPlayer();
+        // SeekBar 初期値セット
         seekBarVolume = binding.seekBarVolume;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
         seekBarVolume.setProgress((int) (currentVolume * 100));
 
-        // 4. 再生・停止ボタン
+        // 再生ボタン押下時の処理
         binding.btnPlayFav.setOnClickListener(v -> {
             if (!favSongs.isEmpty()) {
-                // Serviceにお気に入りのリストを渡す
+                // プレイリストと開始インデックスを Service へ渡す Intent
                 Intent intent = new Intent(requireContext(), MusicService.class)
                         .setAction(MusicService.ACTION_PLAYLIST_PLAY)
                         .putStringArrayListExtra(MusicService.EXTRA_PLAYLIST, uriList)
@@ -112,105 +130,104 @@ public class HomeFragment extends Fragment {
                         .putExtra(MusicService.EXTRA_START_INDEX, currentIndex);
                 ContextCompat.startForegroundService(requireContext(), intent);
 
-
-                Intent volUpIntent = new Intent(getContext(), MusicService.class)
+                // 直後に現在音量を Service に通知
+                Intent volUpIntent = new Intent(requireContext(), MusicService.class)
                         .setAction(ACTION_VOLUME_UP)
                         .putExtra(EXTRA_VOLUME, currentVolume);
-                requireContext().startService(volUpIntent);
+                ContextCompat.startForegroundService(requireContext(), volUpIntent);
             }
         });
+
+        // 停止ボタン押下時の処理
         binding.btnStopFav.setOnClickListener(v -> {
             Intent stop = new Intent(requireContext(), MusicService.class)
                     .setAction(MusicService.ACTION_STOP);
-            requireContext().startService(stop);
+            ContextCompat.startForegroundService(requireContext(), stop);
         });
+
         return root;
     }
 
+    /**
+     * アイテム選択コールバック
+     * @param position 選択された曲の位置
+     * @param song     選択された Song オブジェクト
+     */
     private void onSongSelected(int position, Song song) {
         currentIndex = position;
         binding.tvNowPlayingFav.setText(song.getTitle());
     }
 
+    /**
+     * フラグメント開始時: 音量設定・受信レシーバ登録
+     */
     @Override
     public void onStart() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onStart();
-        // 保存値があれば読み込み、なければデフォルト
+        // 保存音量を再設定
         Float saved = settingDao.getValue("volume");
         currentVolume = (saved != null) ? saved : 0.5f;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
         seekBarVolume.setProgress((int) (currentVolume * 100));
 
+        // SeekBar の変更リスナー
         seekBarVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // 音量計算（0〜1）
                 currentVolume = progress / 100f;
-                // 音量↑用 Intent に currentVolume を添付
-                Intent volUpIntent = new Intent(getContext(), MusicService.class)
+                // Service に音量更新を送信
+                Intent volUpIntent = new Intent(requireContext(), MusicService.class)
                         .setAction(ACTION_VOLUME_UP)
                         .putExtra(EXTRA_VOLUME, currentVolume);
-                requireContext().startService(volUpIntent);
-
-                LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-                Setting setting = new Setting("volume", currentVolume);
-                settingDao.insert(setting);
+                ContextCompat.startForegroundService(requireContext(), volUpIntent);
+                // 設定を永続化
+                settingDao.insert(new Setting("volume", currentVolume));
             }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
-
-        // レシーバーを作成
+        // BroadcastReceiver 登録: Service → 曲タイトル受信
         nowPlayingReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-
+                // Intent から現在の再生タイトル取得
                 String title = intent.getStringExtra(MusicService.EXTRA_NOW_PLAYING);
                 if (title != null) {
                     binding.tvNowPlayingFav.setText(title);
                 }
-                currentIndex = intent.getIntExtra(MusicService.EXTRA_NOW_LOOP_POS, 0);
             }
         };
         IntentFilter filter = new IntentFilter(MusicService.ACTION_UPDATE_NOW_PLAYING);
-        // インテントフィルタを作成して登録
         LocalBroadcastManager.getInstance(requireContext())
                 .registerReceiver(nowPlayingReceiver, filter);
     }
 
+    /**
+     * フラグメント再開時: Service から最新タイトルを求める
+     */
     @Override
     public void onResume() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onResume();
-        // 保存値があれば読み込み、なければデフォルト
-        Float saved = settingDao.getValue("volume");
-        currentVolume = (saved != null) ? saved : 0.5f;
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), currentVolume.toString());
-        seekBarVolume.setProgress((int) (currentVolume * 100));
-
-        // Title配信を依頼
-        Intent titleIntent = new Intent(getContext(), MusicService.class)
+        // Service にタイトル更新をリクエスト
+        Intent titleIntent = new Intent(requireContext(), MusicService.class)
                 .setAction(ACTION_TITLE);
-        requireContext().startService(titleIntent);
+        ContextCompat.startForegroundService(requireContext(), titleIntent);
     }
 
+    /**
+     * フラグメント停止時: MediaPlayer 解放 & レシーバ解除
+     */
     @Override
     public void onStop() {
-        LogUtils.logWithCaller(Thread.currentThread().getStackTrace(), "start");
         super.onStop();
+        // MediaPlayer があれば停止・解放
         if (mediaPlayer != null) {
             if (mediaPlayer.isPlaying()) mediaPlayer.stop();
             mediaPlayer.release();
             mediaPlayer = null;
         }
-        // レシーバー解除
+        // BroadcastReceiver を解除
         if (nowPlayingReceiver != null) {
             LocalBroadcastManager.getInstance(requireContext())
                     .unregisterReceiver(nowPlayingReceiver);
@@ -218,6 +235,9 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    /**
+     * ビュー破棄時に Binding をクリア
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();
