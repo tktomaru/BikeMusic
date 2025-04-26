@@ -151,7 +151,6 @@ public class DashboardFragment extends Fragment {
             Intent stop = new Intent(requireContext(), MusicService.class)
                     .setAction(MusicService.ACTION_STOP);
             requireContext().startService(stop);
-            mediaPlayer.reset();
         });
 
 

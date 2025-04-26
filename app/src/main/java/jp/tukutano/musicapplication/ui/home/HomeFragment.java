@@ -125,20 +125,12 @@ public class HomeFragment extends Fragment {
                     .setAction(MusicService.ACTION_STOP);
             requireContext().startService(stop);
             binding.tvNowPlayingFav.setText("—");
-            mediaPlayer.reset();
         });
         return root;
     }
 
     private void onSongSelected(Song song) {
-        try {
-            mediaPlayer.reset();
-            mediaPlayer.setDataSource(getContext(), Uri.parse(song.getUri()));
-            mediaPlayer.prepare();
             binding.tvNowPlayingFav.setText(song.getTitle());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     /**

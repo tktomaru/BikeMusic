@@ -17,13 +17,12 @@
         app:layout_constraintBottom_toTopOf="@+id/playerControls"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:padding="8dp"
         >
         <androidx.appcompat.widget.SearchView
             android:id="@+id/searchView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:queryHint="曲名・アーティストで検索" />
+            android:queryHint="曲名・アーティストで検索"/>
 
         <!-- アーティスト絞り込みプルダウン -->
         <Spinner
@@ -56,14 +55,10 @@
             android:id="@+id/btnPlay"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
             android:text="再生" />
-
-        <Button
-            android:id="@+id/btnStop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:text="停止" />
 
         <TextView
             android:id="@+id/tvNowPlaying"
@@ -74,6 +69,15 @@
             android:text="—"
             android:ellipsize="end"
             android:singleLine="true"/>
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:textSize="18sp"
+            android:text="停止" />
     </LinearLayout>
 
     <SeekBar
