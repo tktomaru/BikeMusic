@@ -123,7 +123,6 @@ public class HomeFragment extends Fragment {
             Intent stop = new Intent(requireContext(), MusicService.class)
                     .setAction(MusicService.ACTION_STOP);
             requireContext().startService(stop);
-            binding.tvNowPlayingFav.setText("—");
         });
         return root;
     }
@@ -177,10 +176,7 @@ public class HomeFragment extends Fragment {
                 if (title != null) {
                     binding.tvNowPlayingFav.setText(title);
                 }
-                String pos = intent.getStringExtra(MusicService.EXTRA_NOW_LOOP_POS);
-                if (pos != null) {
-                    currentIndex = Integer.parseInt(pos);
-                }
+                currentIndex = intent.getIntExtra(MusicService.EXTRA_NOW_LOOP_POS, 0);
             }
         };
         IntentFilter filter = new IntentFilter(MusicService.ACTION_UPDATE_NOW_PLAYING);

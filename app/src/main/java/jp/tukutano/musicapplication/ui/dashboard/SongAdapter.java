@@ -16,26 +16,43 @@ import jp.tukutano.musicapplication.db.FavoriteDao;
 import jp.tukutano.musicapplication.db.FavoriteSong;
 import jp.tukutano.musicapplication.model.Song;
 
+/***
+ - SongAdapter
+ - RecyclerView に楽曲リストを表示し、
+ - タップで再生、ハートボタンでお気に入り登録・解除を行う \*/
 public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder> {
 
     /**
-     * 曲リスト
+     * 表示する楽曲のリスト
      */
     private List<Song> songList;
     /**
-     * 曲タップ時のコールバック
+     * 楽曲タップ時のコールバック
      */
     private final OnSongClickListener listener;
-
+    /**
+     * お気に入り操作用 DAO
+     */
     private final FavoriteDao favoriteDao;
 
     /**
-     * インターフェース：曲選択コールバック
+     * インターフェース：楽曲選択時のコールバック
      */
     public interface OnSongClickListener {
+        /**
+         * @param position タップされた楽曲の位置
+         * @param song     タップされた楽曲オブジェクト
+         */
         void onSongClick(int position, Song song);
     }
 
+    /**
+     * コンストラクタ
+     *
+     * @param songList 楽曲リスト
+     * @param listener 楽曲タップ時コールバック
+     * @param dao      お気に入り操作用 DAO
+     */
     public SongAdapter(List<Song> songList, OnSongClickListener listener, FavoriteDao dao) {
         this.songList = songList;
         this.listener = listener;
@@ -43,7 +60,9 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
     }
 
     /**
-     * リスト更新用メソッド
+     * フィルタリング後などでリストを更新する
+     *
+     * @param filtered 更新後の楽曲リスト
      */
     public void updateList(List<Song> filtered) {
         this.songList = filtered;
@@ -53,6 +72,7 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
     @NonNull
     @Override
     public SongViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        // item_song.xml を inflate
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_song, parent, false);
         return new SongViewHolder(view);
@@ -61,30 +81,44 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
     @Override
     public void onBindViewHolder(@NonNull SongViewHolder holder, int position) {
         Song song = songList.get(position);
+        // タイトルとアーティスト名をセット
         holder.tvTitle.setText(song.getTitle());
         holder.tvArtist.setText(song.getArtist());
 
-        // お気に入り状態の反映
+        // お気に入り状態をアイコンで表示
         boolean isFav = favoriteDao.isFavorite(song.getId());
         holder.btnFav.setImageResource(
-                isFav ? R.drawable.ic_favorite : R.drawable.ic_favorite_fill
+                isFav ? R.drawable.ic_favorite_fill : R.drawable.ic_favorite
         );
 
-        // タップ時再生
+        // アイテムタップで再生コールバック
         holder.itemView.setOnClickListener(v -> listener.onSongClick(position, song));
 
-        // お気に入りボタン
+        // お気に入りボタン押下で登録/解除
         holder.btnFav.setOnClickListener(v -> {
             if (favoriteDao.isFavorite(song.getId())) {
+                // 既にお気に入りなら削除
                 favoriteDao.delete(toFavoriteSong(song));
                 holder.btnFav.setImageResource(R.drawable.ic_favorite);
             } else {
+                // お気に入りに追加
                 favoriteDao.insert(toFavoriteSong(song));
                 holder.btnFav.setImageResource(R.drawable.ic_favorite_fill);
             }
         });
     }
 
+    @Override
+    public int getItemCount() {
+        return songList.size();
+    }
+
+    /**
+     * Song モデルから FavoriteSong Entity に変換
+     *
+     * @param s Song オブジェクト
+     * @return FavoriteSong オブジェクト
+     */
     private FavoriteSong toFavoriteSong(Song s) {
         FavoriteSong f = new FavoriteSong();
         f.id = s.getId();
@@ -96,19 +130,17 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
         return f;
     }
 
-    @Override
-    public int getItemCount() {
-        return songList.size();
-    }
-
     /**
-     * ビューホルダー
+     * ViewHolder：各アイテムのビューを保持
      */
     static class SongViewHolder extends RecyclerView.ViewHolder {
         TextView tvTitle;
         TextView tvArtist;
         ImageButton btnFav;
 
+        /**
+         * コンストラクタ：ビューIDと紐づけ
+         */
         SongViewHolder(@NonNull View itemView) {
             super(itemView);
             tvTitle = itemView.findViewById(R.id.tvTitle);
@@ -117,3 +149,4 @@ public class SongAdapter extends RecyclerView.Adapter<SongAdapter.SongViewHolder
         }
     }
 }
+

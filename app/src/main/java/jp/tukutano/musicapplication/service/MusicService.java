@@ -1,7 +1,5 @@
 package jp.tukutano.musicapplication.service;
 
-import static android.app.PendingIntent.FLAG_ONE_SHOT;
-
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -50,7 +48,7 @@ public class MusicService extends Service {
     public void onCreate() {
         super.onCreate();
         mediaPlayer = new MediaPlayer();
-        mediaPlayer.setOnCompletionListener(mp -> stopSelf());
+        // １曲の再生が完了したら次の曲を再生する
         mediaPlayer.setOnCompletionListener(mp -> playNext());
         // 初期音量設定
         mediaPlayer.setVolume(currentVolume, currentVolume);
@@ -67,6 +65,7 @@ public class MusicService extends Service {
 
         switch (action) {
             case ACTION_PLAYLIST_PLAY:
+                // 再生
                 // プレイリストと開始インデックスを受け取る
                 playlist = intent.getStringArrayListExtra(EXTRA_PLAYLIST);
                 playTitlelist = intent.getStringArrayListExtra(EXTRA_PLAYLIST_TITLE);
@@ -77,17 +76,15 @@ public class MusicService extends Service {
                 break;
 
             case ACTION_STOP:
-                Intent stopPosIntent = new Intent(ACTION_UPDATE_NOW_PLAYING);
-                stopPosIntent.putExtra(EXTRA_NOW_LOOP_POS, currentIndex);
-                LocalBroadcastManager.getInstance(this)
-                        .sendBroadcast(stopPosIntent);
-
+                // 再生停止
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 stopSelf();
                 break;
 
             case ACTION_VOLUME_UP:
+                // 音量をあげる
             case ACTION_VOLUME_DOWN:
+                // 音量を下げる
                 // Intent から最新の currentVolume を取得
                 float vol = intent.getFloatExtra(EXTRA_VOLUME, currentVolume);
                 // +/-0.1 した後、範囲 clamp
@@ -103,11 +100,13 @@ public class MusicService extends Service {
                 break;
 
             case ACTION_TITLE:
-                // ▶▶▶ 追加：現在再生中の曲タイトルを Broadcast
-                if(null != playTitlelist && !playTitlelist.isEmpty()) {
+                // 再生中タイトルをフラグメントに通知する
+                // ▶▶▶ 現在再生中の曲タイトルを Broadcast
+                if (null != playTitlelist && !playTitlelist.isEmpty()) {
                     String title = playTitlelist.get(currentIndex); /* songタイトルをサービスで保持している変数から取得 */
                     Intent update = new Intent(ACTION_UPDATE_NOW_PLAYING);
-                    update.putExtra(EXTRA_NOW_PLAYING, title);
+                    update.putExtra(EXTRA_NOW_PLAYING, title); // 現在再生中の曲タイトル
+                    update.putExtra(EXTRA_NOW_LOOP_POS, currentIndex); // 曲の再生index
                     LocalBroadcastManager.getInstance(this)
                             .sendBroadcast(update);
                 }
@@ -132,9 +131,9 @@ public class MusicService extends Service {
             String title = playTitlelist.get(currentIndex); /* songタイトルをサービスで保持している変数から取得 */
             Intent update = new Intent(ACTION_UPDATE_NOW_PLAYING);
             update.putExtra(EXTRA_NOW_PLAYING, title);
+            update.putExtra(EXTRA_NOW_LOOP_POS, currentIndex);
             LocalBroadcastManager.getInstance(this)
                     .sendBroadcast(update);
-
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -154,14 +153,16 @@ public class MusicService extends Service {
 
     private Notification buildNotification() {
         String channelId = createNotificationChannel();
+        // 停止のインテント
         Intent stopIntent = new Intent(this, MusicService.class)
                 .setAction(ACTION_STOP);
         PendingIntent pStop = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE);
 
+        // 曲タイトルを通知領域に表示する
         String title = playTitlelist.get(currentIndex);
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle("再生中の音楽")
-                .setContentText( title )
+                .setContentText(title)
                 .setSmallIcon(R.drawable.ic_notification)
                 .addAction(new NotificationCompat.Action(
                         android.R.drawable.ic_media_pause,
@@ -173,11 +174,9 @@ public class MusicService extends Service {
 
     private String createNotificationChannel() {
         String id = "music_playback_channel";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel chan = new NotificationChannel(
-                    id, "Music Playback", NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class).createNotificationChannel(chan);
-        }
+        NotificationChannel chan = new NotificationChannel(
+                id, "Music Playback", NotificationManager.IMPORTANCE_LOW);
+        getSystemService(NotificationManager.class).createNotificationChannel(chan);
         return id;
     }
 
