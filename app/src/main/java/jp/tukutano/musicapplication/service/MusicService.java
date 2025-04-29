@@ -5,7 +5,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -42,6 +46,7 @@ public class MusicService extends Service {
     public static final String EXTRA_VOLUME = "EXTRA_VOLUME";
     // プレイリスト再生
     public static final String ACTION_PLAYLIST_PLAY = "ACTION_PLAYLIST_PLAY";
+    public static final String ACTION_PLAY = "ACTION_PLAY";
     public static final String ACTION_STOP = "ACTION_STOP";
     public static final String EXTRA_PLAYLIST = "EXTRA_PLAYLIST";
     public static final String EXTRA_PLAYLIST_TITLE = "EXTRA_PLAYLIST_TITLE";
@@ -53,6 +58,20 @@ public class MusicService extends Service {
     private List<String> playTitlelist = new ArrayList<>();      // タイトルリスト
     private int currentIndex = 0;                                // 再生中曲のインデックス
     private float currentVolume = 1.0f;                          // 音量 (0.0〜1.0)
+
+
+    // --- 追加：Noisy（イヤホン抜き）検知用レシーバー ---
+    private BroadcastReceiver noisyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // イヤホンが抜かれたら再生を一時停止 or 完全停止
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();              // 一時停止
+                // stopForeground(STOP_FOREGROUND_REMOVE);  // 通知を消すなら
+                // または完全停止したい場合は stopSelf();
+            }
+        }
+    };
 
     /**
      * Service 作成時に呼ばれる
@@ -67,6 +86,9 @@ public class MusicService extends Service {
         mediaPlayer.setOnCompletionListener(mp -> playNext());
         // 初期音量を設定
         mediaPlayer.setVolume(currentVolume, currentVolume);
+        // --- イヤホン抜きイベントを登録 ---
+        IntentFilter filter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+        registerReceiver(noisyReceiver, filter);
     }
 
     /**
@@ -91,13 +113,16 @@ public class MusicService extends Service {
                     playInService(playlist.get(currentIndex));
                 }
                 break;
-
+            case ACTION_PLAY:
+                if (playlist != null && !playlist.isEmpty()) {
+                    playInService(playlist.get(currentIndex));
+                }
+                break;
             case ACTION_STOP:
                 // フォアグラウンド通知を消してサービス停止
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 stopSelf();
                 break;
-
             case ACTION_VOLUME_UP:
             case ACTION_VOLUME_DOWN:
                 // 音量調整
@@ -177,12 +202,18 @@ public class MusicService extends Service {
         PendingIntent pStop = PendingIntent.getService(
                 this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE);
 
+        Intent startIntent = new Intent(this, MusicService.class)
+                .setAction(ACTION_PLAY);
+        PendingIntent pPlay = PendingIntent.getService(
+                this, 0, startIntent, PendingIntent.FLAG_IMMUTABLE);
+
         String title = playTitlelist.get(currentIndex);
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle("再生中の音楽")
                 .setContentText(title)
                 .setSmallIcon(R.drawable.ic_notification)
                 .addAction(android.R.drawable.ic_media_pause, "停止", pStop)
+                .addAction(android.R.drawable.ic_media_play, "再生", pPlay)
                 .setOngoing(true)
                 .build();
     }
@@ -207,6 +238,9 @@ public class MusicService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        // --- レシーバー解除 ---
+        unregisterReceiver(noisyReceiver);
+
         if (mediaPlayer != null) {
             mediaPlayer.stop();
             mediaPlayer.release();
